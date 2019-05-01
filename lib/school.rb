@@ -3,7 +3,7 @@ class School
 
   def initialize(attributes = {})
     @id = attributes[:id].to_i
-    @name = attributes[:name]
+    @name = attributes[:name].strip
     @time_to_wait = attributes[:time_to_wait].to_i
   end
 end

@@ -14,6 +14,6 @@ class Order
 
   def school(schools)
     # retrieve the 'instance' of School associated with order
-    schools.find { |school| school.id == @id }
+    schools.find { |school| school.id == @school_id }
   end
 end
