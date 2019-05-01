@@ -16,4 +16,10 @@ class SchoolsDistance
     # retrieve the school 2
     schools.find { |school| school.id == @school_2_id }
   end
+
+  def self.distance(schools_distances, school_1_id, school_2_id)
+    # method to find out the distance between to school with their ids
+    a = [school_1_id, school_2_id].sort
+    schools_distances.find { |sd| (sd.school_1_id == a[0]) && (sd.school_2_id == a[1]) }.time_in_seconds
+  end
 end
