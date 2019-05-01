@@ -16,8 +16,12 @@ class Processer
     puts 'Processing...'
     t = Time.now
     # iterate through each time slot
-    # orders.map(&:delivery_datetime).uniq.each do |slot|
-    puts calculate_expected_times
+    # puts calculate_expected_times
+    a = dispatch_orders(@orders)
+    puts "\n\n\n"
+    puts a[0].length
+    puts "\n\n\n"
+    puts a[1].length
     puts "Processed in #{Time.now - t} seconds"
   end
 
@@ -38,6 +42,41 @@ class Processer
     @schools_distances.each do |sd|
       sd.time_in_seconds += sd.school_2(@schools).time_to_wait
     end
+  end
+
+  # for each set it sorts with shortest path
+  def shortest_path(orders)
+    orders
+    # returns ordered order list that is the more efficient
+  end
+
+  # returns array where array[0] is a route for delivery guy and array[1] are missing orders
+  def dispatch_orders(orders)
+    puts "starting"
+    assigned_orders, orders_to_assign = [], []
+    orders_to_process = calculate_expected_times(orders)
+    orders.map(&:delivery_datetime).uniq.sort.each do |slot|
+      puts "\n\nslot: #{slot}"
+      # slot = orders_to_process.map { |order| order[:delivery_datetime] }.min
+      orders_on_slot = orders_to_process.select { |order| order[:delivery_datetime] == slot }
+      orders_on_slot.each_with_index do |order, i|
+        if order[:delivery_datetime] + 60 * 5 >= order[:expected_time]
+          puts "#{order[:delivery_datetime] + 60 * 5} vs #{order[:expected_time]}"
+          assigned_orders << order
+          puts 'ok'
+        else
+          puts "not ok"
+          orders_on_slot[i, orders_on_slot.length - i].each do |order|
+            orders_to_assign << order
+            orders_to_process.delete(order)
+          end
+          orders_to_process = shortest_path(orders_to_process)
+          orders_to_process = calculate_expected_times(orders_to_process.map { |record| record[:order] })
+          break
+        end
+      end
+    end
+    [orders_to_process, orders_to_assign]
   end
 
   # calculate the expected_times for an ordered set of orders

@@ -16,4 +16,8 @@ class Order
     # retrieve the 'instance' of School associated with order
     schools.find { |school| school.id == @school_id }
   end
+
+  def self.ids_to_orders(ids, orders)
+    ids.map { |id| orders.find { |order| order.id == id } }
+  end
 end
