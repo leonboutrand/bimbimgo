@@ -1,5 +1,6 @@
 class SchoolsDistance
-  attr_reader :school_1_id, :school_2_id, :time_in_seconds
+  attr_reader :school_1_id, :school_2_id
+  attr_accessor :time_in_seconds
 
   def initialize(attributes = {})
     @school_1_id = attributes[:school_1_id].to_i
