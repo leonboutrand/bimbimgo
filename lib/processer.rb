@@ -17,22 +17,28 @@ class Processer
     puts 'Processing...'
     t = Time.now
 
-    delivery_man_id = @orders_set * 1000
+    result = []
+    delivery_man_id = @orders_set * 1000 + 1
     a = dispatch_orders(@orders)
-    until a[:orders_to_assign].empty?
-      puts "\n\n\n"
-      puts delivery_man_id
-      puts a[:assigned_orders].length
-      p delivery_man = DeliveryMan.new(
+    loop do
+      @delivery_men << DeliveryMan.new(
         id: delivery_man_id,
         starting_school_id: a[:assigned_orders].first[:order].id
       )
-      @delivery_men << delivery_man
+      result += a[:assigned_orders].map do |record|
+        record[:order] = record[:order].id
+        record[:delivery_man_id] = delivery_man_id
+        record
+      end
+      break if a[:orders_to_assign].empty?
+
       a = dispatch_orders(a[:orders_to_assign])
       delivery_man_id += 1
     end
+
     puts "\n\n\n"
     puts "Processed in #{Time.now - t} seconds"
+    result
   end
 
   private
@@ -54,19 +60,15 @@ class Processer
     end
   end
 
-  # returns array where array[0] is a route for delivery guy and array[1] are missing orders
+  # returns hash {array of orders for one delivery guy, array of missing orders}
   def dispatch_orders(orders)
-    puts 'starting'
     orders_to_assign = []
     orders_to_process = path_with_times(orders)
     orders.map(&:delivery_datetime).uniq.sort.each do |slot|
-      puts "slot: #{slot}"
-      orders_on_slot = orders_to_process.select { |order| order[:delivery_datetime] == slot }
+      orders_on_slot = orders_to_process.select { |order| order[:order].delivery_datetime == slot }
       orders_on_slot.each_with_index do |order, i|
         # keep the order if its on time
-        next if order[:delivery_datetime] + 60 * 5 >= order[:expected_time]
-
-        # TODO: keep a condition for same school
+        next if order[:order].delivery_datetime + 60 * 5 >= order[:expected_time]
 
         # if it's too late to deliver other orders of the slot
         orders_on_slot[i, orders_on_slot.length - i].each do |order_to_assign|
@@ -86,31 +88,36 @@ class Processer
     }
   end
 
+  # coordinates shorted_path and calculate_expected_times
+  # returns [{ order, expected_time }]
   def path_with_times(orders)
     calculate_expected_times(shortest_path(orders))
   end
 
-  # calculate the expected_times for an ordered set of orders
+  # calculates the expected_times for an sorted array of orders
+  # returns [{ order, expected_time }]
   def calculate_expected_times(orders)
-    # time is the datetime for first delivery
-    time = orders.first.delivery_datetime - 5 * 60 + orders.first.time_to_deliver
+    # time is initialized with datetime for first delivery
+    time = orders.first.delivery_datetime - 300 + orders.first.time_to_deliver
 
-    # initialize result array with the first order
-    result = [{ order: orders.first, expected_time: time, delivery_datetime: orders.first.delivery_datetime }]
+    # initializes result array with the first order
+    result = [{ order: orders.first, expected_time: time }]
 
-    # iterate through all the orders and returns the expected_time for each
+    # iterate through all the orders
     orders[1, orders.length - 1].each_with_index do |order, i|
       # time is incremented by time_to_deliver plus travelling and waiting times if we change school
       time += order.time_to_deliver + (order.school_id == orders[i - 1].school_id ? 0 : SchoolsDistance.distance(@schools_distances, order.school_id, orders[i - 1].school_id))
 
       # delivery guy will wait a bit if it's too early for next order
       time = [time, order.delivery_datetime - 5 * 60].max
-      result << { order: order, expected_time: time, delivery_datetime: order.delivery_datetime }
+
+      # records the expected_time for each order
+      result << { order: order, expected_time: time }
     end
     result
   end
 
-  # for each set it sorts with shortest path
+  # sorts array of orders to get the shortest path => sorted array of orders
   def shortest_path(orders)
     grouped_orders = group_orders(orders)
     ordered_orders = []
@@ -125,17 +132,15 @@ class Processer
       end
     end
     ordered_orders
-    # cas ou il y en a plus
-    # returns ordered order list that is the more efficient
   end
 
-  # group orders by slot then by school
+  # groups orders array by slot then by school => [[same slot[same school]]]
   def group_orders(orders)
     grouped_orders = orders.group_by(&:delivery_datetime)
     grouped_orders.values.map { |group| group.group_by(&:school_id).values }
   end
 
-  # returns the closest school of origin_school
+  # returns closest school_id of origin_school
   def next_school_id(origin_school_id, schools_id)
     return origin_school_id if schools_id.include?(origin_school_id)
 
@@ -148,6 +153,7 @@ class Processer
     distances.min_by { |distance| distance[:distance] }[:next_school_id]
   end
 
+  # sorts array of schools_id to get shortest path depending on origin school
   def calculate_slot_path(origin_school_id, schools_id)
     path = []
     schools_id.length.times do

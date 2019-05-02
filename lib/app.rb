@@ -1,3 +1,4 @@
 require_relative 'processer'
 
-Processer.new.process
+x = Processer.new(4).process
+p x.length
