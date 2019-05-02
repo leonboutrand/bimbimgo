@@ -1,5 +1,6 @@
 require 'csv'
 require 'date'
+require 'awesome_print'
 require_relative 'models/school'
 require_relative 'models/schools_distance'
 require_relative 'models/order'
@@ -112,34 +113,26 @@ class Processer
   # for each set it sorts with shortest path
   def shortest_path(orders)
     grouped_orders = group_orders(orders)
-    # cas ou c'est dans le meme slot
-    schools_and_slots = grouped_orders.map do |group|
-      puts "group length #{group.length}"
-      {
-        school_id: group.first.school_id,
-        slot: group.first.delivery_datetime
-      }
+    ordered_orders = []
+    next_school_id = orders.first.school_id
+    # [  [ [order1, order2], [orders from other school] ], [ other slot ]  ]
+    grouped_orders.each do |slot_group|
+      schools_id = slot_group.map { |school_group| school_group.first.school_id }
+      slot_path = calculate_slot_path(next_school_id, schools_id)
+      next_school_id = slot_path.last
+      slot_path.each do |school_id|
+        ordered_orders += slot_group.find { |group| group.first.school_id == school_id }
+      end
     end
-    puts schools_and_slots
+    ordered_orders
     # cas ou il y en a plus
-    orders
     # returns ordered order list that is the more efficient
   end
 
+  # group orders by slot then by school
   def group_orders(orders)
-    orders_clone = orders.clone
-    grouped_orders = []
-    until orders_clone.empty?
-      group = []
-      orders_clone.each do |order|
-        break unless (order.school_id == orders_clone.first.school_id) && (order.delivery_datetime == orders_clone.first.delivery_datetime)
-
-        group << order
-        orders_clone.delete(order)
-      end
-      grouped_orders << group
-    end
-    grouped_orders
+    grouped_orders = orders.group_by(&:delivery_datetime)
+    grouped_orders.values.map { |group| group.group_by(&:school_id).values }
   end
 
   # returns the closest school of origin_school
@@ -153,5 +146,15 @@ class Processer
       }
     end
     distances.min_by { |distance| distance[:distance] }[:next_school_id]
+  end
+
+  def calculate_slot_path(origin_school_id, schools_id)
+    path = []
+    schools_id.length.times do
+      school_id = next_school_id(origin_school_id, schools_id)
+      path << school_id
+      schools_id.delete(school_id)
+    end
+    path
   end
 end
