@@ -15,8 +15,7 @@ class Processer
   def process
     puts 'Processing...'
     t = Time.now
-    # iterate through each time slot
-    # puts calculate_expected_times
+
     delivery_man_id = @orders_set * 1000
     a = dispatch_orders(@orders)
     until a[:orders_to_assign].empty?
@@ -54,36 +53,30 @@ class Processer
     end
   end
 
-  # for each set it sorts with shortest path
-  def shortest_path(orders)
-    orders
-    # returns ordered order list that is the more efficient
-  end
-
   # returns array where array[0] is a route for delivery guy and array[1] are missing orders
   def dispatch_orders(orders)
-    puts "starting"
-    assigned_orders, orders_to_assign = [], []
-    orders_to_process = calculate_expected_times(orders)
+    puts 'starting'
+    orders_to_assign = []
+    orders_to_process = path_with_times(orders)
     orders.map(&:delivery_datetime).uniq.sort.each do |slot|
       puts "slot: #{slot}"
-      # slot = orders_to_process.map { |order| order[:delivery_datetime] }.min
       orders_on_slot = orders_to_process.select { |order| order[:delivery_datetime] == slot }
       orders_on_slot.each_with_index do |order, i|
-        if order[:delivery_datetime] + 60 * 5 >= order[:expected_time]
-          # puts "#{order[:delivery_datetime] + 60 * 5} vs #{order[:expected_time]}"
-          assigned_orders << order
-          # puts 'ok'
-        else
-          # puts "not ok"
-          orders_on_slot[i, orders_on_slot.length - i].each do |order_to_assign|
-            orders_to_assign << order_to_assign
-            orders_to_process.delete(order_to_assign)
-          end
-          orders_to_process = shortest_path(orders_to_process)
-          orders_to_process = calculate_expected_times(orders_to_process.map { |record| record[:order] })
-          break
+        # keep the order if its on time
+        next if order[:delivery_datetime] + 60 * 5 >= order[:expected_time]
+
+        # TODO: keep a condition for same school
+
+        # if it's too late to deliver other orders of the slot
+        orders_on_slot[i, orders_on_slot.length - i].each do |order_to_assign|
+          # store them into orders_to_assign
+          orders_to_assign << order_to_assign
+
+          # delete them from orders_to_process
+          orders_to_process.delete(order_to_assign)
         end
+        orders_to_process = path_with_times(orders_to_process.map { |record| record[:order] })
+        break
       end
     end
     {
@@ -92,8 +85,12 @@ class Processer
     }
   end
 
+  def path_with_times(orders)
+    calculate_expected_times(shortest_path(orders))
+  end
+
   # calculate the expected_times for an ordered set of orders
-  def calculate_expected_times(orders = @orders)
+  def calculate_expected_times(orders)
     # time is the datetime for first delivery
     time = orders.first.delivery_datetime - 5 * 60 + orders.first.time_to_deliver
 
@@ -112,8 +109,41 @@ class Processer
     result
   end
 
+  # for each set it sorts with shortest path
+  def shortest_path(orders)
+    grouped_orders = group_orders(orders)
+    # cas ou c'est dans le meme slot
+    schools_and_slots = grouped_orders.map do |group|
+      puts "group length #{group.length}"
+      {
+        school_id: group.first.school_id,
+        slot: group.first.delivery_datetime
+      }
+    end
+    puts schools_and_slots
+    # cas ou il y en a plus
+    orders
+    # returns ordered order list that is the more efficient
+  end
+
+  def group_orders(orders)
+    orders_clone = orders.clone
+    grouped_orders = []
+    until orders_clone.empty?
+      group = []
+      orders_clone.each do |order|
+        break unless (order.school_id == orders_clone.first.school_id) && (order.delivery_datetime == orders_clone.first.delivery_datetime)
+
+        group << order
+        orders_clone.delete(order)
+      end
+      grouped_orders << group
+    end
+    grouped_orders
+  end
+
   # returns the closest school of origin_school
-  def next_school_id(schools_id, origin_school_id)
+  def next_school_id(origin_school_id, schools_id)
     return origin_school_id if schools_id.include?(origin_school_id)
 
     distances = schools_id.map do |school_id|
