@@ -6,7 +6,7 @@ require_relative 'models/order'
 require_relative 'models/delivery_man'
 
 class Processer
-  def initialize(orders_set = 'orders_1')
+  def initialize(orders_set = 1)
     @orders_set = orders_set
     @schools, @schools_distances, @orders, @delivery_men = [], [], [], []
     import_data_from_csv
@@ -17,11 +17,21 @@ class Processer
     t = Time.now
     # iterate through each time slot
     # puts calculate_expected_times
+    delivery_man_id = @orders_set * 1000
     a = dispatch_orders(@orders)
+    until a[:orders_to_assign].empty?
+      puts "\n\n\n"
+      puts delivery_man_id
+      puts a[:assigned_orders].length
+      p delivery_man = DeliveryMan.new(
+        id: delivery_man_id,
+        starting_school_id: a[:assigned_orders].first[:order].id
+      )
+      @delivery_men << delivery_man
+      a = dispatch_orders(a[:orders_to_assign])
+      delivery_man_id += 1
+    end
     puts "\n\n\n"
-    puts a[0].length
-    puts "\n\n\n"
-    puts a[1].length
     puts "Processed in #{Time.now - t} seconds"
   end
 
@@ -32,7 +42,7 @@ class Processer
     csv_options = { headers: :first_row, header_converters: :symbol }
     CSV.foreach(File.join(__dir__, 'db/schools.csv'), csv_options) { |row| @schools << School.new(row) }
     CSV.foreach(File.join(__dir__, 'db/schools_distances.csv'), csv_options) { |row| @schools_distances << SchoolsDistance.new(row) }
-    CSV.foreach(File.join(__dir__, "db/#{@orders_set}.csv"), csv_options) { |row| @orders << Order.new(row) }
+    CSV.foreach(File.join(__dir__, "db/orders_#{@orders_set}.csv"), csv_options) { |row| @orders << Order.new(row) }
     transform_schools_distance_data
     @orders.sort_by! { |order| [order.delivery_datetime, order.school_id, order.priority] }
   end
@@ -56,19 +66,19 @@ class Processer
     assigned_orders, orders_to_assign = [], []
     orders_to_process = calculate_expected_times(orders)
     orders.map(&:delivery_datetime).uniq.sort.each do |slot|
-      puts "\n\nslot: #{slot}"
+      puts "slot: #{slot}"
       # slot = orders_to_process.map { |order| order[:delivery_datetime] }.min
       orders_on_slot = orders_to_process.select { |order| order[:delivery_datetime] == slot }
       orders_on_slot.each_with_index do |order, i|
         if order[:delivery_datetime] + 60 * 5 >= order[:expected_time]
-          puts "#{order[:delivery_datetime] + 60 * 5} vs #{order[:expected_time]}"
+          # puts "#{order[:delivery_datetime] + 60 * 5} vs #{order[:expected_time]}"
           assigned_orders << order
-          puts 'ok'
+          # puts 'ok'
         else
-          puts "not ok"
-          orders_on_slot[i, orders_on_slot.length - i].each do |order|
-            orders_to_assign << order
-            orders_to_process.delete(order)
+          # puts "not ok"
+          orders_on_slot[i, orders_on_slot.length - i].each do |order_to_assign|
+            orders_to_assign << order_to_assign
+            orders_to_process.delete(order_to_assign)
           end
           orders_to_process = shortest_path(orders_to_process)
           orders_to_process = calculate_expected_times(orders_to_process.map { |record| record[:order] })
@@ -76,7 +86,10 @@ class Processer
         end
       end
     end
-    [orders_to_process, orders_to_assign]
+    {
+      assigned_orders: orders_to_process,
+      orders_to_assign: orders_to_assign.map { |record| record[:order] }
+    }
   end
 
   # calculate the expected_times for an ordered set of orders
@@ -111,15 +124,4 @@ class Processer
     end
     distances.min_by { |distance| distance[:distance] }[:next_school_id]
   end
-
-
-    #   schools = orders.select { |order| order.delivery_datetime == slot }.map(&:school_id).uniq
-    #   shortest_path = shortest_path(schools)
-    # end
-    # return [ {order_id: x, expected_time: xx}]
-
-  # calculate_expected_times(orders)
-  # p schools_id = orders.map(&:school_id).uniq.sort
-  # sd1 = schools_distances.select { |dist| schools_id.include?(dist.school_1_id) && schools_id.include?(dist.school_2_id) }.sort_by!(&:time_in_seconds)
-  # sd1.each { |sd| puts "#{sd.school_1_id} - #{sd.school_2_id} : #{sd.time_in_seconds}" }
 end
