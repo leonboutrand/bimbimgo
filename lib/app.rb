@@ -1,4 +1,5 @@
 require_relative 'processer'
 
-x = Processer.new(4).process
-p x.length
+processer = Processer.new(4)
+ap processer.process
+ap processer.delivery_men
